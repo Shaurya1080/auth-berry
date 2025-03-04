@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -11,30 +10,42 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<Omit<User, 'password'> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const response = await getCurrentUser();
         if (!response.success) {
-          toast({
-            title: "Authentication Error",
-            description: "Please log in to access the dashboard",
-            variant: "destructive",
-          });
-          navigate('/login');
-          return;
+          if (response.error === 'Network error. Please try again.') {
+            setError('Could not connect to server. Showing demo data.');
+            setUser({
+              id: '1',
+              name: 'Demo User',
+              email: 'demo@example.com',
+              createdAt: new Date().toISOString(),
+            });
+          } else {
+            toast({
+              title: "Authentication Error",
+              description: "Please log in to access the dashboard",
+              variant: "destructive",
+            });
+            navigate('/login');
+            return;
+          }
+        } else {
+          setUser(response.data as Omit<User, 'password'>);
         }
-
-        setUser(response.data as Omit<User, 'password'>);
       } catch (error) {
         console.error('Authentication error:', error);
-        toast({
-          title: "Error",
-          description: "Failed to authenticate user",
-          variant: "destructive",
+        setError('Could not connect to server. Showing demo data.');
+        setUser({
+          id: '1',
+          name: 'Demo User',
+          email: 'demo@example.com',
+          createdAt: new Date().toISOString(),
         });
-        navigate('/login');
       } finally {
         setLoading(false);
       }
@@ -57,6 +68,13 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout title="Dashboard">
+      {error && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-md text-amber-700">
+          <p>{error}</p>
+          <p className="text-sm mt-1">This is a demo mode with sample data.</p>
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
