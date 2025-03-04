@@ -57,17 +57,3 @@ This demo includes client-side API simulation for:
 - User authentication
 - JWT-like token generation and validation
 
-## Deployment
-
-You can deploy this project to any static site hosting service like:
-- Netlify
-- Vercel
-- GitHub Pages
-- Render
-
-## Future Improvements
-
-- Add a real backend server with Express.js
-- Implement MySQL/PostgreSQL database integration
-- Add profile management features
-- Implement password reset functionality
