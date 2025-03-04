@@ -1,153 +1,181 @@
 
 const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const dotenv = require('dotenv');
+const jwt = require('jsonwebtoken');
+const router = express.Router();
 
-// Load environment variables
-dotenv.config();
+// Simple in-memory data store for development
+const users = [];
+let nextId = 1;
 
-const app = express();
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Mock users database (in-memory storage)
-let users = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john@example.com',
-    password: '$2a$10$D4R5Fz/Mjt.2S6GG1hgQ6Ow88aoT6N35QC7FfADVNEyHSYX2qOPFO', // hashed "password123"
-    createdAt: new Date().toISOString(),
-  },
-];
-
-// Authentication middleware
+// Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   
-  if (token == null) return res.status(401).json({ success: false, error: 'No token provided' });
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Access token required' });
+  }
   
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ success: false, error: 'Invalid token' });
-    req.user = user;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret-key');
+    req.userId = decoded.userId;
     next();
-  });
+  } catch (error) {
+    return res.status(403).json({ success: false, error: 'Invalid or expired token' });
+  }
 };
 
-// Register endpoint
-app.post('/api/register', async (req, res) => {
+// User registration
+router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
     
-    // Check if email already exists
-    if (users.some(user => user.email === email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email already in use'
+    // Validation
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'All fields are required' 
+      });
+    }
+    
+    // Check if user already exists
+    const userExists = users.find(user => user.email === email);
+    if (userExists) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User with this email already exists' 
       });
     }
     
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
     
     // Create new user
-    const newUser = {
-      id: (users.length + 1).toString(),
+    const user = {
+      id: String(nextId++),
       name,
       email,
       password: hashedPassword,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
     };
     
-    // Add user to mock database
-    users.push(newUser);
+    users.push(user);
     
-    res.status(201).json({
-      success: true
+    return res.status(201).json({ 
+      success: true 
     });
+    
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Server error during registration' 
     });
   }
 });
 
-// Login endpoint
-app.post('/api/login', async (req, res) => {
+// User login
+router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    // Find user by email
-    const user = users.find(u => u.email === email);
-    
-    // If user not found or password doesn't match
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid email or password'
+    // Validation
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email and password are required' 
       });
     }
     
-    // Generate token
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+    // Find user
+    const user = users.find(user => user.email === email);
+    if (!user) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
     
-    // Return user data (without password) and token
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+    
+    // Create JWT token
+    const token = jwt.sign(
+      { userId: user.id }, 
+      process.env.JWT_SECRET || 'default-secret-key', 
+      { expiresIn: '24h' }
+    );
+    
+    // Return user data without password
     const { password: _, ...userWithoutPassword } = user;
-    res.json({
-      success: true,
+    
+    return res.status(200).json({ 
+      success: true, 
       data: {
         token,
         user: userWithoutPassword
       }
     });
+    
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error'
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Server error during login' 
     });
   }
 });
 
-// Get current user endpoint
-app.get('/api/users/me', authenticateToken, (req, res) => {
-  const user = users.find(u => u.id === req.user.userId);
-  
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: 'User not found'
+// Get current user
+router.get('/users/me', authenticateToken, (req, res) => {
+  try {
+    const user = users.find(user => user.id === req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+    
+    // Return user data without password
+    const { password, ...userWithoutPassword } = user;
+    
+    return res.status(200).json({ 
+      success: true, 
+      data: userWithoutPassword
+    });
+    
+  } catch (error) {
+    console.error('Get user error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Server error retrieving user data' 
     });
   }
-  
-  const { password: _, ...userWithoutPassword } = user;
-  res.json({
-    success: true,
-    data: userWithoutPassword
-  });
 });
 
-// Serve static files from the React app in production
-if (process.env.NODE_ENV === 'production') {
-  const path = require('path');
-  app.use(express.static(path.join(__dirname, '../dist')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
+// Debug endpoint to list all users (development only)
+if (process.env.NODE_ENV !== 'production') {
+  router.get('/users', (req, res) => {
+    const usersWithoutPasswords = users.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
+    
+    res.json({ 
+      success: true, 
+      data: usersWithoutPasswords 
+    });
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-module.exports = app;
+module.exports = router;

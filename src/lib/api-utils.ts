@@ -9,8 +9,8 @@ export interface User {
 }
 
 // API base URL - will use environment variable in production or localhost in development
-// For production deployed to Render, we can use relative path
-const API_URL = '/api';
+// Use a relative path for production and full URL for development
+const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5000/api';
 
 // API response type
 type ApiResponse<T> = {

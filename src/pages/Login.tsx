@@ -57,7 +57,7 @@ const Login = () => {
       } else {
         toast({
           title: "Error",
-          description: response.error || "Failed to login",
+          description: response.error || "Failed to login. Please check if your server is running.",
           variant: "destructive",
         });
       }
@@ -65,7 +65,7 @@ const Login = () => {
       console.error('Login error:', error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description: "An unexpected error occurred. Please check if your server is running.",
         variant: "destructive",
       });
     } finally {
