@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentUser, User } from '@/lib/api-utils';
+import { toast } from '@/components/ui/use-toast';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -12,15 +13,31 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = () => {
-      const response = getCurrentUser();
-      if (!response.success) {
-        navigate('/login');
-        return;
-      }
+    const checkAuth = async () => {
+      try {
+        const response = await getCurrentUser();
+        if (!response.success) {
+          toast({
+            title: "Authentication Error",
+            description: "Please log in to access the dashboard",
+            variant: "destructive",
+          });
+          navigate('/login');
+          return;
+        }
 
-      setUser(response.data as Omit<User, 'password'>);
-      setLoading(false);
+        setUser(response.data as Omit<User, 'password'>);
+      } catch (error) {
+        console.error('Authentication error:', error);
+        toast({
+          title: "Error",
+          description: "Failed to authenticate user",
+          variant: "destructive",
+        });
+        navigate('/login');
+      } finally {
+        setLoading(false);
+      }
     };
 
     checkAuth();
