@@ -1,212 +1,170 @@
 
-import { toast } from '@/components/ui/use-toast';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 
-// Type definitions
+// User type definition
 export interface User {
   id: string;
   name: string;
   email: string;
   password: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
-interface LoginCredentials {
-  email: string;
-  password: string;
-}
+// Mock users database (in-memory storage)
+let users: User[] = [
+  {
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com',
+    password: '$2a$10$D4R5Fz/Mjt.2S6GG1hgQ6Ow88aoT6N35QC7FfADVNEyHSYX2qOPFO', // hashed "password123"
+    createdAt: new Date().toISOString(),
+  },
+];
 
-interface RegisterData {
-  name: string;
-  email: string;
-  password: string;
-}
+// Simple implementation of token generation (browser-compatible)
+const generateToken = (userId: string): string => {
+  // In a real app, this would be a proper JWT
+  // For this demo, we'll use a simple encoded string
+  const payload = {
+    userId,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+  };
+  return btoa(JSON.stringify(payload));
+};
 
-interface ApiResponse<T> {
+// Simple token verification (browser-compatible)
+const verifyToken = (token: string): { userId: string } | null => {
+  try {
+    const decoded = JSON.parse(atob(token));
+    if (decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null; // Token expired
+    }
+    return { userId: decoded.userId };
+  } catch (err) {
+    return null;
+  }
+};
+
+// API response type
+type ApiResponse<T> = {
   success: boolean;
   data?: T;
   error?: string;
-  message?: string;
-}
-
-// Initialize local storage if it doesn't exist
-const initializeStorage = () => {
-  if (!localStorage.getItem('users')) {
-    localStorage.setItem('users', JSON.stringify([]));
-  }
 };
 
-// Get all users from local storage
-const getUsers = (): User[] => {
-  initializeStorage();
-  return JSON.parse(localStorage.getItem('users') || '[]');
-};
+// Register a new user
+export const register = async ({
+  name,
+  email,
+  password,
+}: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<ApiResponse<null>> => {
+  // Simulate API delay
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
-// Save users to local storage
-const saveUsers = (users: User[]) => {
-  localStorage.setItem('users', JSON.stringify(users));
-};
-
-// Find user by email
-const findUserByEmail = (email: string): User | undefined => {
-  const users = getUsers();
-  return users.find(user => user.email === email);
-};
-
-// Hash password
-const hashPassword = async (password: string): Promise<string> => {
-  return await bcrypt.hash(password, 10);
-};
-
-// Compare password
-const comparePassword = async (password: string, hashedPassword: string): Promise<boolean> => {
-  return await bcrypt.compare(password, hashedPassword);
-};
-
-// Generate JWT
-const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, 'your-secret-key', { expiresIn: '1h' });
-};
-
-// Parse JWT (without verification, just for demo)
-export const parseToken = (token: string): { userId: string } => {
-  try {
-    return jwt.verify(token, 'your-secret-key') as { userId: string };
-  } catch (error) {
-    throw new Error('Invalid token');
-  }
-};
-
-// Register API
-export const register = async (data: RegisterData): Promise<ApiResponse<{ user: Omit<User, 'password'> }>> => {
-  try {
-    // Check if user already exists
-    if (findUserByEmail(data.email)) {
-      return { 
-        success: false, 
-        error: 'User already exists with this email' 
-      };
-    }
-
-    // Hash password
-    const hashedPassword = await hashPassword(data.password);
-
-    // Create new user
-    const newUser: User = {
-      id: Date.now().toString(),
-      name: data.name,
-      email: data.email,
-      password: hashedPassword,
-      createdAt: new Date()
-    };
-
-    // Get existing users and add new user
-    const users = getUsers();
-    users.push(newUser);
-    saveUsers(users);
-
-    // Return success without password
-    const { password, ...userWithoutPassword } = newUser;
-    return { 
-      success: true, 
-      data: { user: userWithoutPassword },
-      message: 'User registered successfully' 
-    };
-  } catch (error) {
-    console.error('Registration error:', error);
-    return { 
-      success: false, 
-      error: 'Failed to register user' 
+  // Check if email already exists
+  if (users.some((user) => user.email === email)) {
+    return {
+      success: false,
+      error: 'Email already in use',
     };
   }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Create new user
+  const newUser: User = {
+    id: (users.length + 1).toString(),
+    name,
+    email,
+    password: hashedPassword,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Add user to mock database
+  users.push(newUser);
+
+  return {
+    success: true,
+  };
 };
 
-// Login API
-export const login = async (credentials: LoginCredentials): Promise<ApiResponse<{ token: string, user: Omit<User, 'password'> }>> => {
-  try {
-    // Find user
-    const user = findUserByEmail(credentials.email);
-    if (!user) {
-      return { 
-        success: false, 
-        error: 'Invalid email or password' 
-      };
-    }
+// Login user
+export const login = async ({
+  email,
+  password,
+}: {
+  email: string;
+  password: string;
+}): Promise<ApiResponse<{ token: string; user: Omit<User, 'password'> }>> => {
+  // Simulate API delay
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Compare password
-    const isPasswordValid = await comparePassword(credentials.password, user.password);
-    if (!isPasswordValid) {
-      return { 
-        success: false, 
-        error: 'Invalid email or password' 
-      };
-    }
+  // Find user by email
+  const user = users.find((u) => u.email === email);
 
-    // Generate token
-    const token = generateToken(user.id);
-
-    // Return success with token
-    const { password, ...userWithoutPassword } = user;
-    return { 
-      success: true, 
-      data: { token, user: userWithoutPassword },
-      message: 'Login successful' 
-    };
-  } catch (error) {
-    console.error('Login error:', error);
-    return { 
-      success: false, 
-      error: 'Failed to login' 
+  // If user not found or password doesn't match
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return {
+      success: false,
+      error: 'Invalid email or password',
     };
   }
+
+  // Generate token
+  const token = generateToken(user.id);
+
+  // Return user data (without password) and token
+  const { password: _, ...userWithoutPassword } = user;
+  return {
+    success: true,
+    data: {
+      token,
+      user: userWithoutPassword,
+    },
+  };
 };
 
 // Get current user
 export const getCurrentUser = (): ApiResponse<Omit<User, 'password'>> => {
-  try {
-    // Get token from localStorage
-    const token = localStorage.getItem('token');
-    if (!token) {
-      return { 
-        success: false, 
-        error: 'Not authenticated' 
-      };
-    }
+  const token = localStorage.getItem('token');
 
-    // Parse token
-    const { userId } = parseToken(token);
-
-    // Find user
-    const users = getUsers();
-    const user = users.find(u => u.id === userId);
-    if (!user) {
-      return { 
-        success: false, 
-        error: 'User not found' 
-      };
-    }
-
-    // Return user without password
-    const { password, ...userWithoutPassword } = user;
-    return { 
-      success: true, 
-      data: userWithoutPassword 
-    };
-  } catch (error) {
-    console.error('Get current user error:', error);
-    return { 
-      success: false, 
-      error: 'Failed to get current user' 
+  if (!token) {
+    return {
+      success: false,
+      error: 'Not authenticated',
     };
   }
+
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return {
+      success: false,
+      error: 'Invalid or expired token',
+    };
+  }
+
+  const user = users.find((u) => u.id === decoded.userId);
+
+  if (!user) {
+    return {
+      success: false,
+      error: 'User not found',
+    };
+  }
+
+  const { password: _, ...userWithoutPassword } = user;
+  return {
+    success: true,
+    data: userWithoutPassword,
+  };
 };
 
-// Logout
-export const logout = (): ApiResponse<null> => {
+// Logout user (client-side only)
+export const logout = (): void => {
   localStorage.removeItem('token');
-  return { 
-    success: true, 
-    message: 'Logged out successfully' 
-  };
 };
